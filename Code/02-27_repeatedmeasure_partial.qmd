@@ -308,12 +308,13 @@ The general correlation matrix model consumed **6 more dfs** than the default mo
 This model **decreased AIC** but **increased BIC** compared to the default model. Here's an interesting case where the different metrics do not agree.
 
 # Model 4 - Autoregressive order 1 (AR1)
+why numerical in "form" argument? because we want the means of the dap 
 
 ```{r}
 mod4_ar1 <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corAR1(form = ~dap), 
   data = rm_rcbd_df)
 
 mod4_ar1
@@ -350,12 +351,13 @@ anova(mod1_default,
 AR1 model had the same dfs and fit metrics as the CS model.
 
 # Model 5 - Autoregressive order moving average (ARMA11)
+p = no of datapoints to go back in, q is the moving average 
 
 ```{r}
 mod5_arma11 <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corARMA(p = 1, q = 1),
   data = rm_rcbd_df)
 
 mod5_arma11
@@ -397,14 +399,14 @@ Let's fit our first **spatial** correlation structure.
 mod6_exp <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corExp(form = ~dap),
   data = rm_rcbd_df)
 
 mod6_exp
 ```
 
 Notice how we have a **range** estimate above, which is the estimated correlation parameter for spatial models.
-
+correlation and semivariogram move in opposite directions. Range is the value(on x axis) after which the correlation/ semivariogram plateaus out. 
 ## empirical autocorrelation function
 
 ```{r}
@@ -455,7 +457,7 @@ Thus, our best candidate remains model 3 (general).
 mod7_gaus <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corGaus(form = ~dap),
   data = rm_rcbd_df)
 
 mod7_gaus
@@ -487,7 +489,7 @@ Same issue as with the exponential, no semivariogram fit.
 intervals(mod7_gaus, which = "var-cov")
 ```
 
-range interval does not include 0, so it is significant.
+range interval does not include 0, so it is significant, but lower variance as compared to exponential. 
 
 ## comparison
 
@@ -507,7 +509,7 @@ Thus, our best candidate remains model 3 (general).
 mod8_lin <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corLin(form = ~dap),
   data = rm_rcbd_df)
 
 mod8_lin
@@ -560,7 +562,7 @@ Thus, our best candidate remains model 3 (general).
 mod9_rq <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corRatio(form = ~dap),
   data = rm_rcbd_df)
 
 mod9_rq
@@ -610,7 +612,7 @@ Thus, our best candidate remains model 3 (general).
 mod10_sph <- lme(
   yield_kgha ~ krate_kgha*nrate_kgha*fdap,
   random = ~ 1|block/krate_kgha/nrate_kgha,
-
+  correlation = corSpher(form = ~dap),
   data = rm_rcbd_df)
 
 mod10_sph
@@ -649,7 +651,12 @@ range interval does not include 0, so it is significant.
 ```{r}
 anova(mod1_default, 
       mod2_cs, mod3_gen, mod4_ar1, mod5_arma11,
-      mod6_exp, mod7_gaus, mod8_lin, mod9_rq, mod10_sph) 
+      mod6_exp, mod7_gaus, mod8_lin, mod9_rq, mod10_sph) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "modelname") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(modelname, model, df, aic, bic) %>% 
+  arrange(aic)
 
 ```
 
@@ -672,12 +679,15 @@ Let's assume that the general model was the best, and perform inference on it.
 ```{r}
 library(broom.mixed)
 mod3_gen_resid <- augment(mod3_gen) %>%
-  mutate(.stdresid=resid(mod3_gen, type="pearson", scaled=T))
+  mutate(.stdresid=resid(mod3_gen, 
+                         type="pearson", 
+                         scaled=T))
 
 mod3_gen_resid
 ```
 
 ### Block random effects are iid \~ N(0,var_a)
+[1] is for the first component of ranef.
 
 ```{r }
 ranef(mod3_gen)[[1]] %>%
@@ -821,6 +831,8 @@ Anova(mod1_default, type = 3)
 ```
 
 > Take a moment to compare this ANOVA table with that from the general model (the one we ran just prior). Do you see any differences?
+
+interaction between k rate and n rate, and fdap. Since n rate and k rate are part of the interaction, they dont need to be compared even if they were significant. 
 
 ## K x N x dap interaction
 
